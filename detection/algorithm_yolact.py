@@ -48,7 +48,7 @@ class YOLACT(Detection):
             t = postprocess(result, w, h, visualize_lincomb=False, crop_masks=True, score_threshold=0.15)
             cfg.rescore_bbox = save
         with timer.env('Copy'):
-            idx = t[1].argsort(0, descending=True)[:10]  # number of predictions
+            idx = t[1].argsort(0, descending=True)[:5]  # number of predictions
             classes, scores, boxes = [x[idx].cpu().detach().numpy() for x in t[:3]]
         return classes, scores, boxes
 
@@ -61,9 +61,11 @@ class YOLACT(Detection):
                 obj = [int((x1 + x2) / 2), int((y1 + y2) / 2), x2 - x1, y2 - y1]
                 bbox_xywh.append(obj)
                 confs.append(scores[idx])
+        if len(bbox_xywh) == 0:
+            return None
         return deep_sort.update(torch.Tensor(bbox_xywh), torch.Tensor(confs), image)
 
-    def visualize(self, image, result, tracks, count, show_mask=True, show_bbox=True, show_label=True):
+    def visualize(self, image, result, tracks, show_mask=True, show_bbox=True, show_label=True):
         for value in list(result):
             x1, y1, x2, y2, track_id = value
             direction = tracks[track_id]['direction']
@@ -81,5 +83,5 @@ class YOLACT(Detection):
                 track_list = tracks[track_id]['history']
                 for idx, track in enumerate(track_list):
                     cv2.circle(image, track, radius=2, color=(255, 0, 0), thickness=-1)
-        cv2.putText(image, 'Out: {} | In:{}'.format(count[0], count[1]), (10, 10), 0, 0.5, (255, 255, 255))
+
         return image

@@ -27,13 +27,13 @@ class DetectionThread(threading.Thread):
             try:
                 if self.stop:
                     break
-                if 'img' in globals() and 'new_img' in globals():
-                    global img, new_img
-                    if new_img:
+                if 'img' in globals() and 'is_new_img' in globals():
+                    global img, is_new_img
+                    if is_new_img:
                         self.isDetecting = True
                         cv2.imshow(str(self.title), DM.run_detect(self.algorithm_id, img))
                         self.isDetecting = False
-                        new_img = False
+                        is_new_img = False
             finally:
                 if cv2.waitKey(20) & 0xFF == ord('q'):
                     cv2.destroyAllWindows()
@@ -52,10 +52,10 @@ try:
             buf_size -= len(temp_buf)
             buf += temp_buf
             if not detection_thread.isDetecting:
-                global img, new_img
+                global img, is_new_img
                 img = numpy.frombuffer(buf, dtype='uint8')
                 img = cv2.imdecode(img, 1)
-                new_img = True
+                is_new_img = True
         if cv2.waitKey(20) & 0xFF == ord('q'):
             break
 except (struct.error, ConnectionAbortedError, ConnectionResetError):

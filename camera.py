@@ -49,5 +49,5 @@ server.listen(5)
 print('Waiting for client')
 while True:
     clientSocket, clientAddress = server.accept()
-    newThread = ClientThread(clientAddress, clientSocket, "./test_video/2.mp4")
+    newThread = ClientThread(clientAddress, clientSocket, "./test_video/1.MOV")
     newThread.start()

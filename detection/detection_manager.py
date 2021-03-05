@@ -32,7 +32,12 @@ class DetectionManager(Singleton):
 
         self.tracks = {}
         self.tracks_length = 10
-        self.detect_range = [(120, 250), (556, 306)]
+        # 0,335     1920,650
+        self.detect_range = [[0, 335], [1920, 650]]
+        self.detect_range[0][0] = int(self.detect_range[0][0] / 1920 * 600)
+        self.detect_range[0][1] = int(self.detect_range[0][1] / 1080 * 360)
+        self.detect_range[1][0] = int(self.detect_range[1][0] / 1920 * 600)
+        self.detect_range[1][1] = int(self.detect_range[1][1] / 1080 * 360)
         self.detect_out = 0
         self.detect_in = 0
         self.detect_tracks = 5
@@ -40,10 +45,12 @@ class DetectionManager(Singleton):
     def run_detect(self, id, img):
         classes, scores, boxes = self.algorithms[id].detect(img)
         tracking_result = self.algorithms[id].object_tracking(self.deep_sort, classes, scores, boxes, img)
-        self.save_track(tracking_result)
-        self.detect_count(tracking_result)
-        img = self.algorithms[id].visualize(img, tracking_result, self.tracks, (self.detect_out, self.detect_in))
-        cv2.rectangle(img, self.detect_range[0], self.detect_range[1], (0, 255, 0), 2)
+        if tracking_result is not None:
+            self.save_track(tracking_result)
+            self.detect_count(tracking_result)
+            img = self.algorithms[id].visualize(img, tracking_result, self.tracks)
+        cv2.rectangle(img, tuple(self.detect_range[0]), tuple(self.detect_range[1]), (0, 255, 0), 2)
+        cv2.putText(img, 'Out: {} | In:{}'.format(self.detect_out, self.detect_in), (10, 10), 0, 0.5, (255, 255, 255))
         return img
 
     def save_track(self, tracking_result):
@@ -59,7 +66,8 @@ class DetectionManager(Singleton):
         for value in list(tracking_result):
             x1, y1, x2, y2, track_id = value
             last = self.tracks[track_id]['history'][-1]
-            if len(self.tracks[track_id]['history']) >= self.detect_tracks and self.is_in_detect_range(last[0], last[1]):
+            if len(self.tracks[track_id]['history']) >= self.detect_tracks and self.is_in_detect_range(last[0],
+                                                                                                       last[1]):
                 direction_result = []
                 for idx in range(1, self.detect_tracks):
                     penultimate = self.tracks[track_id]['history'][-idx]
