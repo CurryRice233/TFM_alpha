@@ -6,6 +6,7 @@ import cv2
 import random
 import colorsys
 import warnings
+import torch
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -40,7 +41,7 @@ class MRCNN(Detection):
         self.model_dir = os.path.join(self.root_path, "logs")
 
         # Local path to trained weights file
-        self.coco_model_path = os.path.join(self.root_path, "mask_rcnn_coco.h5")
+        self.coco_model_path = os.path.join(self.root_path, "./model/mask_rcnn_coco.h5")
 
         class InferenceConfig(coco.CocoConfig):
             GPU_COUNT = 1
@@ -53,20 +54,33 @@ class MRCNN(Detection):
         self.model.keras_model._make_predict_function()
 
     def detect(self, image):
-        results = self.model.detect([image], verbose=0)
-        return results[0]
+        results = self.model.detect([image], verbose=0)[0]
+        return results['class_ids'], results['scores'], results['rois']
 
-    def visualize(self, image, result, show_mask=True, show_bbox=True, show_label=True):
-        colors = random_colors(len(result['rois']))
-        for idx, class_id in enumerate(result['class_ids']):
-            if class_id == 1:
-                y1, x1, y2, x2 = result['rois'][idx]
-                if show_bbox:
-                    color = tuple(map(lambda x: x * 255, colors[idx]))
-                    cv2.rectangle(image, (x1, y1), (x2, y2), color, 1)
-                if show_mask:
-                    mask = result['masks'][:, :, idx]
-                    image = apply_mask(image, mask, colors[idx])
-                if show_label:
-                    cv2.putText(image, 'Person {:.3f}'.format(result['scores'][idx]), (x1, y1 + 10), 0, 0.3, (255, 255, 255))
+    def object_tracking(self, deep_sort, classes, scores, boxes, image):
+        bbox_xywh = []
+        confs = []
+        for idx in range(len(classes)):
+            if classes[idx] == 1:
+                y1, x1, y2, x2 = boxes[idx]
+                obj = [int((x1 + x2) / 2), int((y1 + y2) / 2), x2 - x1, y2 - y1]
+                bbox_xywh.append(obj)
+                confs.append(scores[idx])
+        if len(bbox_xywh) == 0:
+            return None
+        return deep_sort.update(torch.Tensor(bbox_xywh), torch.Tensor(confs), image)
+
+    def visualize(self, image, result, tracks, show_mask=True, show_bbox=True, show_label=True):
+        for value in list(result):
+            x1, y1, x2, y2, track_id = value
+            if show_bbox:
+                color = (0, 0, 255)
+                cv2.rectangle(image, (x1, y1), (x2, y2), color, 1)
+            if show_label:
+                cv2.putText(image, 'ID:{}'.format(track_id), (x1, y1 + 10), 0, 0.5, (255, 255, 255))
+
+            track_list = tracks[track_id]['history']
+            for idx, track in enumerate(track_list):
+                cv2.circle(image, track, radius=2, color=(255, 0, 0), thickness=-1)
+
         return image

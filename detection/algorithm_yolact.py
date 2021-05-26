@@ -17,7 +17,7 @@ class YOLACT(Detection):
         Detection.__init__(self, 'YOLACT')
         self.root_path = os.path.abspath("./")
         sys.path.append(self.root_path)
-        self.coco_model_path = os.path.join(self.root_path, "dataset/yolact_resnet50_54_800000.pth")
+        self.model_path = os.path.join(self.root_path, "model/yolact_resnet50_54_800000.pth")
 
         set_cfg('yolact_resnet50_config')
         with torch.no_grad():
@@ -25,7 +25,7 @@ class YOLACT(Detection):
             torch.set_default_tensor_type('torch.cuda.FloatTensor')
 
         self.model = Yolact()
-        self.model.load_weights(self.coco_model_path)
+        self.model.load_weights(self.model_path)
         self.model.eval()
         self.model = self.model.cuda()
         self.model.detect.use_fast_nms = True
@@ -48,7 +48,7 @@ class YOLACT(Detection):
             t = postprocess(result, w, h, visualize_lincomb=False, crop_masks=True, score_threshold=0.15)
             cfg.rescore_bbox = save
         with timer.env('Copy'):
-            idx = t[1].argsort(0, descending=True)[:5]  # number of predictions
+            idx = t[1].argsort(0, descending=True)[:6]  # number of predictions
             classes, scores, boxes = [x[idx].cpu().detach().numpy() for x in t[:3]]
         return classes, scores, boxes
 
@@ -68,18 +68,11 @@ class YOLACT(Detection):
     def visualize(self, image, result, tracks, show_mask=True, show_bbox=True, show_label=True):
         for value in list(result):
             x1, y1, x2, y2, track_id = value
-            direction = tracks[track_id]['direction']
-            if direction is not None:
-                if show_bbox:
-                    color = (255, 0, 0)
-                    if direction == 'out':
-                        color = (0, 255, 255)
-                    elif direction == 'in':
-                        color = (0, 0, 255)
-                    cv2.rectangle(image, (x1, y1), (x2, y2), color, 1)
-                if show_label:
-                    cv2.putText(image, 'ID:{}'.format(track_id), (x1, y1 + 10), 0, 0.5, (255, 255, 255))
-
+            if show_bbox:
+                color = (0, 0, 255)
+                cv2.rectangle(image, (x1, y1), (x2, y2), color, 1)
+            if show_label:
+                cv2.putText(image, 'ID:{}'.format(track_id), (x1, y1 + 10), 0, 0.5, (255, 255, 255))
                 track_list = tracks[track_id]['history']
                 for idx, track in enumerate(track_list):
                     cv2.circle(image, track, radius=2, color=(255, 0, 0), thickness=-1)

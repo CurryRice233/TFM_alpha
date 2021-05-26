@@ -1,10 +1,24 @@
 import math
 from typing import List
-
+import torch
 import cv2
+from detection.algorithm_mrcnn import MRCNN
 from detection.algorithm_yolact import YOLACT
 from deep_sort.utils.parser import get_config
 from deep_sort.deep_sort import DeepSort
+import requests
+
+token = 'XXXXXXX'
+my_id = "XXXXXXX"
+
+
+def send_message(message, chat_id=my_id):
+    url = "https://api.telegram.org/bot" + token + "/sendMessage?chat_id=" + chat_id + "&text=" + message
+    response = requests.get(url)
+    if not response.ok:
+        return False
+    else:
+        return True
 
 
 class Singleton(object):
@@ -19,6 +33,7 @@ class Singleton(object):
 class DetectionManager(Singleton):
     def __init__(self):
         # Singleton.__init__()
+        # self.algorithms = [MRCNN()]
         self.algorithms = [YOLACT()]
         self.cfg = get_config()
         self.cfg.merge_from_file("deep_sort/configs/deep_sort.yaml")
@@ -32,15 +47,8 @@ class DetectionManager(Singleton):
 
         self.tracks = {}
         self.tracks_length = 10
-        # 0,335     1920,650
-        self.detect_range = [[0, 335], [1920, 650]]
-        self.detect_range[0][0] = int(self.detect_range[0][0] / 1920 * 600)
-        self.detect_range[0][1] = int(self.detect_range[0][1] / 1080 * 360)
-        self.detect_range[1][0] = int(self.detect_range[1][0] / 1920 * 600)
-        self.detect_range[1][1] = int(self.detect_range[1][1] / 1080 * 360)
-        self.detect_out = 0
-        self.detect_in = 0
-        self.detect_tracks = 5
+        self.counter = {'out': 0, 'in': 0}
+        self.threshold = 4
 
     def run_detect(self, id, img):
         classes, scores, boxes = self.algorithms[id].detect(img)
@@ -49,8 +57,8 @@ class DetectionManager(Singleton):
             self.save_track(tracking_result)
             self.detect_count(tracking_result)
             img = self.algorithms[id].visualize(img, tracking_result, self.tracks)
-        cv2.rectangle(img, tuple(self.detect_range[0]), tuple(self.detect_range[1]), (0, 255, 0), 2)
-        cv2.putText(img, 'Out: {} | In:{}'.format(self.detect_out, self.detect_in), (10, 10), 0, 0.5, (255, 255, 255))
+        cv2.putText(img, 'Out: {} | In:{}'.format(self.counter['out'], self.counter['in']), (10, 10), 0, 0.5,
+                    (255, 255, 255))
         return img
 
     def save_track(self, tracking_result):
@@ -65,38 +73,24 @@ class DetectionManager(Singleton):
     def detect_count(self, tracking_result):
         for value in list(tracking_result):
             x1, y1, x2, y2, track_id = value
-            last = self.tracks[track_id]['history'][-1]
-            if len(self.tracks[track_id]['history']) >= self.detect_tracks and self.is_in_detect_range(last[0],
-                                                                                                       last[1]):
-                direction_result = []
-                for idx in range(1, self.detect_tracks):
-                    penultimate = self.tracks[track_id]['history'][-idx]
-                    direction_result.append(self.get_direction(last, penultimate))
-                direction = max(set(direction_result), key=direction_result.count)
-                if direction == 'out' and direction != self.tracks[track_id]['direction']:
-                    if self.tracks[track_id]['direction'] == 'in':
-                        self.detect_in -= 1
-                    self.tracks[track_id]['direction'] = 'out'
-                    self.detect_out += 1
-                elif direction == 'in' and direction != self.tracks[track_id]['direction']:
-                    if self.tracks[track_id]['direction'] == 'out':
-                        self.detect_out -= 1
-                    self.tracks[track_id]['direction'] = 'in'
-                    self.detect_in += 1
+            if track_id in self.tracks and len(self.tracks[track_id]['history']) >= self.tracks_length:
+                direction = self.get_direction(self.tracks[track_id]['history'][-1],
+                                               self.tracks[track_id]['history'][0])
+                if direction is not None and direction != self.tracks[track_id]['direction']:
+                    self.counter[direction] += 1
+                    self.tracks[track_id]['direction'] = direction
+                    '''if self.counter['in'] >= self.threshold:
+                        send_message(
+                            'the number of people has reached the limit [Out:{}, in:{}]'.format(self.counter['out'],
+                                                                                                self.counter['in']))'''
 
-    def get_direction(self, last, penultimate):
-        angle = math.atan2(last[1] - penultimate[1], last[0] - penultimate[0]) * (180 / math.pi)
+    def get_direction(self, last, first):
+        angle = math.atan2(last[1] - first[1], last[0] - first[0]) * (180 / math.pi)
         if 0 < angle < 180:
-            return 'out'
-        elif -180 < angle < -1:
             return 'in'
+        elif -180 < angle < -1:
+            return 'out'
         return None
-
-    def is_in_detect_range(self, x, y):
-        if (self.detect_range[0][0] < x < self.detect_range[1][0]) and (
-                self.detect_range[0][1] < y < self.detect_range[1][1]):
-            return True
-        return False
 
     def list_algorithms(self):
         for i, v in enumerate(self.algorithms):
